@@ -19,32 +19,48 @@ def server_program():
     server_socket.bind((host, port))
     dioda = False
 
-    mydb = mysql.connector.connect(
-      host="localhost",
-      user="root",
-      password="password"
+    master = mysql.connector.connect(
+      host='192.168.1.42',
+      user='remote',
+      password='password',
+      auth_plugin='mysql_native_password',
+      autocommit=True
     )
 
-    cursor = mydb.cursor()
+    cursorMaster = master.cursor()
+
+
+    slave = mysql.connector.connect(
+      host='192.168.1.44',
+      user='remoteread',
+      password='password',
+      auth_plugin='mysql_native_password'
+    )
+
+    cursorSlave = slave.cursor()
 
     #cursor.execute("SHOW DATABASES")
 
     #for x in cursor:
         #print(x)
 
-    cursor.execute("USE projekt")
-    cursor.execute("SHOW TABLES")
+    cursorMaster.execute("USE projekt")
+    cursorSlave.execute("USE projekt")
+    cursorMaster.execute("SHOW TABLES")
 
-    for x in cursor:
+    for x in cursorMaster:
         print(x)
 
-    cursor.execute("UPDATE terminy SET dostepnosc = 1 where id BETWEEN 1 AND 10")
-    cursor.execute("select * FROM terminy")
+    #cursorMaster.execute("UPDATE terminy SET dostepnosc = 1 where id BETWEEN 1 AND 10")
+    #master.commit()
+    cursorMaster.execute("select * FROM terminy")
 
-    for x in cursor:
+    for x in cursorMaster:
         print(x)
 
     while True:
+
+
         server_socket.listen(1)
         conn, address = server_socket.accept()
         print("Connection from: " + str(address))
@@ -55,27 +71,27 @@ def server_program():
                 break
             if data == "show":
                 response = "dostepne terminy: \n"
-                cursor.execute("select * FROM terminy WHERE dostepnosc=1")
-                for x in cursor:
+                cursorSlave.execute("select * FROM terminy WHERE dostepnosc=1")
+                for x in cursorSlave:
                     delimeter = ', '
                     print(delimeter.join([str(value) for value in x]))
                     response += delimeter.join([str(value) for value in x])
                     response += '\n'
                 conn.send(response.encode())
             elif data == "showAll":
-                cursor.execute("select * FROM terminy")
+                cursorSlave.execute("select * FROM terminy")
                 response = "wszystkie terminy: \n"
                 #conn.send(response.encode())
-                for x in cursor:
+                for x in cursorSlave:
                     delimeter = ', '
                     print(delimeter.join([str(value) for value in x]))
                     response += delimeter.join([str(value) for value in x])
                     response += '\n'
                 conn.send(response.encode())
             elif data == "book":
-                cursor.execute("select * FROM terminy")
+                cursorMaster.execute("select * FROM terminy")
                 lenght =0
-                for x in cursor:
+                for x in cursorMaster:
                     lenght += 1
                 response = 'ktory termin'
                 conn.send(response.encode())
@@ -84,7 +100,8 @@ def server_program():
                     term = int(termin)
                     if   term > 0 and term <= lenght:
                         response = "zgadza sie"
-                        cursor.execute("UPDATE terminy SET dostepnosc = 0 where id = %s", (termin,))
+                        cursorMaster.execute("UPDATE terminy SET dostepnosc = 0 where id = %s", (termin,))
+                        master.commit()
                         print(response)
                         conn.send(response.encode())
                     else:
